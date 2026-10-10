@@ -3,11 +3,9 @@
 Ne jamais déployer ce code tel quel. Votre mission : le rendre conforme.
 Documentation interactive : http://localhost:5000/docs
 """
-import base64
 import hashlib
 import logging
 import os
-import pickle
 import random
 import sqlite3
 import subprocess
@@ -50,6 +48,10 @@ class Product(Base):
 
 class CalcData(BaseModel):
     expr: constr(min_length=1, max_length=100)
+
+class Profile(BaseModel):
+    name: str
+    age: int
 
 engine = create_engine(f"sqlite:///{DB_PATH}")
 
@@ -152,16 +154,19 @@ def calc(data: CalcData):
         return JSONResponse({"error": "invalid expression"}, status_code=400)
     return {"result": str(val)}
 
+
 @app.post("/import-yaml")
 async def import_yaml(request: Request):
-    cfg = yaml.load(await request.body(), Loader=yaml.Loader)
+    try:
+        cfg = yaml.safe_load(await request.body())
+    except yaml.YAMLError:
+        return JSONResponse({"error": "invalid yaml"}, status_code=400)
     return {"keys": list(cfg.keys()) if isinstance(cfg, dict) else str(type(cfg))}
 
 
 @app.post("/import-profile")
-async def import_profile(request: Request):
-    profile = pickle.loads(base64.b64decode(await request.body()))
-    return {"profile": str(profile)}
+def import_profile(profile: Profile):
+    return {"profile": profile.dict()}
 
 
 @app.get("/fetch")
