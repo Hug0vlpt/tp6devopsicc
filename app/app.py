@@ -12,7 +12,6 @@ import random
 import sqlite3
 import subprocess
 import traceback
-
 import requests
 import uvicorn
 import yaml
@@ -22,6 +21,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from sqlalchemy import Float, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+
+from pydantic import BaseModel, constr
 
 SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
@@ -36,6 +37,10 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 class Base(DeclarativeBase):
     pass
+
+class LoginData(BaseModel):
+    username: constr(min_length=1, max_length=64)
+    password: constr(min_length=1, max_length=128)
 
 class Product(Base):
     __tablename__ = "products"
@@ -92,11 +97,13 @@ def health():
 
 
 @app.post("/login")
-def login(request: Request, data: dict = Body(...)):
-    username, password = data["username"], data["password"]
+def login(request: Request, data: LoginData):
+    username, password = data.username, data.password
     log.info(f"login attempt user={username} password={password}")
-    sql = f"SELECT * FROM users WHERE username='{username}' AND password='{md5(password)}'"
-    row = db().execute(sql).fetchone()
+    row = db().execute(
+        "SELECT id, username, password FROM users WHERE username = ?",
+        (data.username,),
+    ).fetchone()
     if not row:
         return JSONResponse({"error": "bad credentials"}, status_code=401)
     request.session["user_id"] = row["id"]
