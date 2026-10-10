@@ -15,6 +15,7 @@ import traceback
 import requests
 import uvicorn
 import yaml
+import ast
 from fastapi import Body, FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.middleware.sessions import SessionMiddleware
@@ -46,6 +47,9 @@ class Product(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String)
     price: Mapped[float] = mapped_column(Float)
+
+class CalcData(BaseModel):
+    expr: constr(min_length=1, max_length=100)
 
 engine = create_engine(f"sqlite:///{DB_PATH}")
 
@@ -141,9 +145,12 @@ def get_file(name: str):
 
 
 @app.post("/calc")
-def calc(data: dict = Body(...)):
-    return {"result": str(eval(data["expr"]))}
-
+def calc(data: CalcData):
+    try:
+        val = ast.literal_eval(data.expr)
+    except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+        return JSONResponse({"error": "invalid expression"}, status_code=400)
+    return {"result": str(val)}
 
 @app.post("/import-yaml")
 async def import_yaml(request: Request):
