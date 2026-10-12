@@ -14,13 +14,14 @@ import requests
 import uvicorn
 import yaml
 import ast
-from fastapi import Body, FastAPI, Request
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import Float, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from pydantic import BaseModel, constr
 from ipaddress import IPv4Address
+from pathlib import Path
 
 SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
@@ -143,7 +144,11 @@ def hello(name: str = ""):
 
 @app.get("/files/{name:path}")
 def get_file(name: str):
-    return FileResponse(os.path.join(UPLOAD_DIR, name))
+    BASE = Path(UPLOAD_DIR).resolve()
+    p = (BASE / name).resolve()
+    if not p.is_relative_to(BASE) or not p.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(p)
 
 
 @app.post("/calc")
