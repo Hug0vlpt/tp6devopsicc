@@ -23,6 +23,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from pydantic import BaseModel, constr
 from ipaddress import IPv4Address
 from pathlib import Path
+from urllib.parse import urlparse
 
 SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
@@ -179,7 +180,11 @@ def import_profile(profile: Profile):
 
 @app.get("/fetch")
 def fetch(url: str):
-    r = requests.get(url, verify=False)
+    ALLOWED = {"api.partenaire.com"}
+    u = urlparse(url)
+    if u.scheme != "https" or u.hostname not in ALLOWED:
+        raise HTTPException(status_code=400)
+    r = requests.get(url, timeout=5, allow_redirects=False)
     return PlainTextResponse(r.text[:500])
 
 
