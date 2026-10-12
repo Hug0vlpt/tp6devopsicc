@@ -16,6 +16,7 @@ import yaml
 import ast
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import Float, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
@@ -139,7 +140,9 @@ def ping(host: IPv4Address = IPv4Address("127.0.0.1")):
 
 @app.get("/hello")
 def hello(name: str = ""):
-    return HTMLResponse(f"<h1>Bonjour {name}</h1>")
+    templates = Jinja2Templates(directory="templates")
+    return templates.TemplateResponse(
+    "hello.html", {"request": request, "name": name})
 
 
 @app.get("/files/{name:path}")
