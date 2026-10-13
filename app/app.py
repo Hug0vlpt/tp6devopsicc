@@ -129,7 +129,7 @@ def login(request: Request, data: LoginData):
 
     request.session["user_id"] = row["id"]
     request.session["token"] = secrets.token_urlsafe(32)
-    log.info("login success user=%r, password=%r", row["username"], row["password"])
+    log.info("login success user=%r", row["username"])
     return {"status": "logged in", "user": row["username"]}
 
 
