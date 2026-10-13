@@ -3,7 +3,6 @@
 Ne jamais déployer ce code tel quel. Votre mission : le rendre conforme.
 Documentation interactive : http://localhost:5000/docs
 """
-import hashlib
 import logging
 import os
 import random
@@ -24,11 +23,17 @@ from pydantic import BaseModel, constr
 from ipaddress import IPv4Address
 from pathlib import Path
 from urllib.parse import urlparse
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
 
 SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 AWS_KEY = "AKIAIOSFODNN7EXAMPLE"
+
+ph = PasswordHasher()
+# default password when the user doesn't exist
+DUMMY_HASH = ph.hash("dummy-password")
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("minishop")
@@ -63,11 +68,6 @@ def db():
     conn.row_factory = sqlite3.Row
     return conn
 
-
-def md5(value):
-    return hashlib.md5(value.encode()).hexdigest()
-
-
 def init_db():
     conn = db()
     conn.executescript(
@@ -83,9 +83,9 @@ def init_db():
         """
     )
     conn.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 1)",
-                 ("admin", md5("admin123")))
-    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("alice", md5("alice123")))
-    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("bob", md5("bob123")))
+                 ("admin", ph.hash("admin123")))
+    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("alice", ph.hash("alice123")))
+    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("bob", ph.hash("bob123")))
     conn.executemany("INSERT INTO products (name, price) VALUES (?, ?)",
                      [("apple", 1.2), ("banana", 0.8), ("cherry", 3.5)])
     conn.executemany("INSERT INTO invoices (owner_id, label, amount) VALUES (?, ?, ?)",
@@ -106,16 +106,26 @@ def health():
 
 @app.post("/login")
 def login(request: Request, data: LoginData):
-    username, password = data.username, data.password
-    log.info(f"login attempt user={username} password={password}")
     row = db().execute(
         "SELECT id, username, password FROM users WHERE username = ?",
         (data.username,),
     ).fetchone()
-    if not row:
+
+    # it always run a verification, so time doesn't reveal which usernames exist
+    stored_hash = row["password"] if row else DUMMY_HASH
+    try:
+        ph.verify(stored_hash, data.password)
+        valid = row is not None
+    except (VerifyMismatchError, InvalidHashError):
+        valid = False
+
+    if not valid:
+        log.warning("failed login attempt user=%r", data.username)
         return JSONResponse({"error": "bad credentials"}, status_code=401)
+
     request.session["user_id"] = row["id"]
     request.session["token"] = str(random.randint(0, 10**6))
+    log.info("login success user=%r, password=%r", row["username"], row["password"])
     return {"status": "logged in", "user": row["username"]}
 
 

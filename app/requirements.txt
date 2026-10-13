@@ -8,3 +8,7 @@ requests==2.25.0
 PyYAML==6.0.1
 SQLAlchemy==2.1.4
 fastapi-sqlalchemy==0.2
+argon2-cffi=25.1.0
+argon2-cffi-bindings=26.1.0
+cffi=2.1.1
+pycparser=3.11
