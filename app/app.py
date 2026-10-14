@@ -13,7 +13,7 @@ import requests
 import uvicorn
 import yaml
 import ast
-from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request, Depends
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -202,15 +202,28 @@ def fetch(url: str):
     return PlainTextResponse(r.text[:500])
 
 
-@app.get("/invoices/{invoice_id}")
-def invoice(invoice_id: int, request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
-    row = db().execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
-    if not row:
-        return JSONResponse({"error": "not found"}, status_code=404)
-    return dict(row)
+def current_user(request: Request):
+    uid = request.session.get("user_id")
+    if uid is None:
+        raise HTTPException(status_code=401)
+    row = db().execute(
+        "SELECT id, username, is_admin FROM users WHERE id = ?", (uid,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=401)
+    return row
 
+
+@app.get("/invoices/{invoice_id}")
+def invoice(invoice_id: int, user=Depends(current_user)):
+    row = db().execute(
+        "SELECT * FROM invoices WHERE id = ? AND owner_id = ?",
+        (invoice_id, user["id"]),
+    ).fetchone()
+    # la facture n'appartient pas à l'utilisateur connecté
+    if not row:
+        raise HTTPException(status_code=404)
+    return dict(row)
 
 @app.get("/admin/users")
 def admin_users(request: Request):
