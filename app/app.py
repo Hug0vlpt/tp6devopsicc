@@ -107,7 +107,8 @@ def init_db():
 
 @app.exception_handler(Exception)
 async def handle_error(request: Request, exc: Exception):
-    return HTMLResponse("<pre>" + traceback.format_exc() + "</pre>", status_code=500)
+    log.exception("unhandled error")
+    return JSONResponse({"error": "internal server error"}, status_code=500)
 
 
 @app.get("/health")
