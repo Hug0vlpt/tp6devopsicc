@@ -243,6 +243,13 @@ def invoice(invoice_id: int, user=Depends(current_user)):
         raise HTTPException(status_code=404)
     return dict(row)
 
+@app.middleware("http")
+async def headers(request, call_next):
+    r = await call_next(request)
+    r.headers["Content-Security-Policy"] = "default-src 'self'"
+    r.headers["X-Content-Type-Options"] = "nosniff"
+    return r
+
 
 @app.get("/admin/users")
 def admin_users(user=Depends(require("user:read"))):
