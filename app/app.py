@@ -202,6 +202,14 @@ def fetch(url: str):
     return PlainTextResponse(r.text[:500])
 
 
+# RBAC
+ROLE_PERMS = {
+    "viewer": {"invoice:read"},
+    "support": {"invoice:read", "user:read"},
+    "admin": {"invoice:read", "user:read", "user:delete"},
+}
+
+
 def current_user(request: Request):
     uid = request.session.get("user_id")
     if uid is None:
@@ -211,7 +219,17 @@ def current_user(request: Request):
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=401)
-    return row
+    user = dict(row)
+    user["role"] = "admin" if user["is_admin"] else "viewer"
+    return user
+
+
+def require(perm: str):
+    def checker(user=Depends(current_user)):
+        if perm not in ROLE_PERMS.get(user["role"], set()):
+            raise HTTPException(status_code=403)
+        return user
+    return checker
 
 
 @app.get("/invoices/{invoice_id}")
@@ -225,18 +243,15 @@ def invoice(invoice_id: int, user=Depends(current_user)):
         raise HTTPException(status_code=404)
     return dict(row)
 
+
 @app.get("/admin/users")
-def admin_users(request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
+def admin_users(user=Depends(require("user:read"))):
     rows = db().execute("SELECT id, username, is_admin FROM users").fetchall()
     return [dict(r) for r in rows]
 
 
 @app.delete("/users/{user_id}")
-def delete_user(user_id: int, request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
+def delete_user(user_id: int, user=Depends(require("user:delete"))):
     conn = db()
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
