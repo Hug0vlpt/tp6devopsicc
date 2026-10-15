@@ -19,12 +19,16 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import Float, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
-from pydantic import BaseModel, constr
+from pydantic import BaseModel, Field, StrictInt, StrictStr, conint, constr
 from ipaddress import IPv4Address
 from pathlib import Path
 from urllib.parse import urlparse
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 
 SECRET_KEY = os.environ["SECRET_KEY"]
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
@@ -37,6 +41,8 @@ DUMMY_HASH = ph.hash("dummy-password")
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("minishop")
 
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(
     title="MiniShop",
     debug=False,
@@ -44,6 +50,9 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     SessionMiddleware,
@@ -55,22 +64,27 @@ app.add_middleware(
 class Base(DeclarativeBase):
     pass
 
-class LoginData(BaseModel):
-    username: constr(min_length=1, max_length=64)
-    password: constr(min_length=1, max_length=128)
-
 class Product(Base):
     __tablename__ = "products"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String)
     price: Mapped[float] = mapped_column(Float)
 
-class CalcData(BaseModel):
-    expr: constr(min_length=1, max_length=100)
+class StrictModel(BaseModel):
+    class Config:
+        extra = "forbid"
+        anystr_strip_whitespace = True
 
-class Profile(BaseModel):
-    name: str
-    age: int
+class LoginData(StrictModel):
+    username: constr(strict=True, min_length=1, max_length=64)
+    password: constr(strict=True, min_length=1, max_length=128)
+
+class CalcData(StrictModel):
+    expr: constr(strict=True, min_length=1, max_length=100)
+
+class Profile(StrictModel):
+    name: constr(strict=True, min_length=1, max_length=64)
+    age: conint(strict=True, ge=0, le=150)
 
 engine = create_engine(f"sqlite:///{DB_PATH}")
 
@@ -78,6 +92,7 @@ def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def init_db():
     conn = db()
@@ -117,6 +132,7 @@ def health():
 
 
 @app.post("/login")
+@limiter.limit("5/minute")
 def login(request: Request, data: LoginData):
     row = db().execute(
         "SELECT id, username, password FROM users WHERE username = ?",
