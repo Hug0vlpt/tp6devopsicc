@@ -16,6 +16,7 @@ import ast
 from fastapi import Body, FastAPI, HTTPException, Request, Depends
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import Float, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
@@ -120,10 +121,9 @@ def init_db():
     conn.close()
 
 
-@app.exception_handler(Exception)
-async def handle_error(request: Request, exc: Exception):
-    log.exception("unhandled error")
-    return JSONResponse({"error": "internal server error"}, status_code=500)
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse({"error": "invalid request"}, status_code=422)
 
 
 @app.get("/health")
