@@ -1,0 +1,11 @@
+fastapi
+pydantic
+uvicorn
+itsdangerous
+httpx
+requests
+PyYAML
+SQLAlchemy
+argon2-cffi
+slowapi
+jinja2
