@@ -20,7 +20,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import Float, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
-from pydantic import BaseModel, Field, StrictInt, StrictStr, conint, constr
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, conint, constr
 from ipaddress import IPv4Address
 from pathlib import Path
 from urllib.parse import urlparse
@@ -72,9 +72,7 @@ class Product(Base):
     price: Mapped[float] = mapped_column(Float)
 
 class StrictModel(BaseModel):
-    class Config:
-        extra = "forbid"
-        anystr_strip_whitespace = True
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 class LoginData(StrictModel):
     username: constr(strict=True, min_length=1, max_length=64)
