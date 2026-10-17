@@ -3,3 +3,6 @@
 __pycache__/
 *.pyc
 *.db
+__pycache__/
+*.py[cod]
+.pytest_cache/
