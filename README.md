@@ -8,12 +8,47 @@ Cours 6 – Écrire du code Python sécurisé · durée indicative : 3 h · en b
 
 ## Mise en route
 
+Prérequis : Python 3.12 (même version que le `Dockerfile` et que `requirements.txt`, compilé avec cette version), Docker (optionnel).
+
 ```bash
 cd "TP06-Secure-Code"
-python -m venv .venv && source .venv/bin/activate    # Windows : .venv\Scripts\activate
-pip install -r app/requirements.txt pytest bandit pip-audit
-cd app && python app.py                               # http://localhost:5000/docs
-cd .. && pytest -q tests                              # la plupart des tests sont ROUGES
+python3.12 -m venv .venv && source .venv/bin/activate    # Windows : .venv\Scripts\activate
+python -m pip install --require-hashes -r app/requirements.txt    # dépendances pinnées + hashes
+python -m pip install pytest bandit pip-audit                      # outils de dev/sécurité
+
+# Configuration : la clé de session n'est plus dans le code
+cp .env.example .env            # puis remplacer SECRET_KEY (.env n'est jamais commité)
+export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+
+cd app && python app.py         # écoute sur http://127.0.0.1:5000 (/docs et /openapi.json désactivés)
+cd .. && python -m pytest -q tests    # tous les tests doivent être VERTS
+```
+
+### Vérifications de sécurité (en local)
+
+```bash
+python -m bandit -r app -lll                                  # analyse statique (HIGH)
+python -m pip_audit -r app/requirements.txt                   # dépendances vulnérables
+gitleaks detect --source .                                    # secrets dans l'historique
+docker build -t minishop:ci app/
+trivy image --severity HIGH,CRITICAL --ignore-unfixed minishop:ci
+```
+
+### Mettre à jour les dépendances
+
+Les dépendances directes sont dans `app/requirements.in`, le fichier verrouillé est généré :
+
+```bash
+cd app
+pip-compile --upgrade --generate-hashes requirements.in -o requirements.txt
+```
+
+### Lancer avec Docker
+
+```bash
+docker build -t minishop app/
+docker run --rm -p 127.0.0.1:5000:5000 -e SECRET_KEY="<votre_clé>" minishop
+curl http://127.0.0.1:5000/health        # {"status":"ok"}
 ```
 
 Les tests utilisent `/ping` (Linux/macOS/WSL recommandé). Initialisez un dépôt Git et **faites un commit par faille corrigée** (`git init`, message du type `fix(sqli): requêtes paramétrées`).
